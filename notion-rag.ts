@@ -207,6 +207,52 @@ async function getAllPagesContent() {
   }
 }
 
+async function getAllContent() {
+  try {
+    const mainPageId = process.env.NOTION_PAGE_ID;
+    if (!mainPageId) throw new Error("NOTION_PAGE_ID is not defined");
+
+    const response = await notion.blocks.children.list({
+      block_id: mainPageId,
+    });
+
+    let allContent = [];
+    let childPageIds = [];
+
+    for (const block of response.results) {
+      const blockWithType = block as { type: string; [key: string]: any };
+
+      if (
+        blockWithType.type === "paragraph" &&
+        blockWithType.paragraph?.rich_text?.length > 0
+      ) {
+        const text = blockWithType.paragraph.rich_text
+          .map((t: any) => t.plain_text)
+          .join("");
+        if (text.trim()) {
+          allContent.push(text);
+        }
+      } else if (blockWithType.type === "child_page") {
+        childPageIds.push({
+          id: block.id,
+          title: blockWithType.child_page.title,
+        });
+      }
+    }
+
+    for (const page of childPageIds) {
+      console.log(`\n📄 페이지 "${page.title}" 내용 가져오는 중...`);
+      const pageContent = await getPageContent(page.id);
+      allContent.push(`\n--- ${page.title} ---\n${pageContent}`);
+    }
+
+    return allContent.join("\n");
+  } catch (error) {
+    console.error("❌ 에러:", error);
+    throw error;
+  }
+}
+
 // 실행
 findDatabaseInPage();
 getPageStructure();
@@ -218,4 +264,9 @@ getAllPagesContent().then((pages) => {
     console.log(page.content.slice(0, 200) + "..."); // 미리보기로 200자만
     console.log(`전체 내용 길이: ${page.content.length}자`);
   });
+});
+
+getAllContent().then((content) => {
+  console.log("\n📝 전체 내용:");
+  console.log(content);
 });
